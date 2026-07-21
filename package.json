@@ -1,0 +1,13 @@
+{
+  "name": "gmail-bulk-sender",
+  "version": "1.0.0",
+  "description": "Simple Email Sender Web App for Render",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "nodemailer": "^6.9.13"
+  }
+}
