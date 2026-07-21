@@ -5,6 +5,7 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Render Environment Password
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "ChangeMe123!";
 
 app.use(express.json());
@@ -19,10 +20,10 @@ app.post('/api/login', (req, res) => {
     return res.status(401).json({ success: false, message: "Invalid Password" });
 });
 
-// Helper: Micro Delay for Human-like Sending Pattern
+// Helper Delay Function
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Fast & Anti-Spam Mail Sending Route
+// Normal Gmail Mail Sender Route
 app.post('/api/send-email', async (req, res) => {
     const { senderName, senderEmail, appPassword, subject, message, recipients } = req.body;
 
@@ -39,16 +40,15 @@ app.post('/api/send-email', async (req, res) => {
         return res.status(400).json({ success: false, message: "Kam se kam ek recipient email dalein." });
     }
 
-    // SMTP Transporter
+    // Direct Gmail SMTP via Port 465 (SSL) - Better Inbox Trust Score
     const transporter = nodemailer.createTransport({
-        service: 'gmail',
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true, // SSL/TLS
         auth: {
             user: senderEmail,
             pass: appPassword
-        },
-        pool: true,
-        maxConnections: 3,
-        maxMessages: 50
+        }
     });
 
     let successCount = 0;
@@ -56,46 +56,39 @@ app.post('/api/send-email', async (req, res) => {
 
     for (const recipient of emailList) {
         try {
-            // Anti-Spam HTML Formatting
-            const formattedHtml = `
-                <div style="font-family: Arial, sans-serif; font-size: 15px; color: #222; line-height: 1.6;">
-                    ${message.replace(/\n/g, '<br>')}
-                    <br><br>
-                    <hr style="border: none; border-top: 1px solid #eee; margin-top: 20px;" />
-                    <p style="font-size: 11px; color: #888;">
-                        This email was sent to ${recipient}. If you no longer wish to receive these, please reply with "Unsubscribe".
-                    </p>
-                </div>
-            `;
-
+            const cleanName = senderName ? senderName.trim() : senderEmail.split('@')[0];
+            
             const mailOptions = {
-                from: `"${senderName}" <${senderEmail}>`,
+                from: `"${cleanName}" <${senderEmail}>`,
                 to: recipient,
                 subject: subject,
                 text: message,
-                html: formattedHtml,
+                html: `
+                    <div style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; color: #333333; line-height: 1.5;">
+                        ${message.replace(/\n/g, '<br>')}
+                    </div>
+                `,
                 headers: {
-                    'X-Priority': '3', // Normal Priority (High Priority flags spam)
-                    'X-Mailer': 'Nodemailer'
+                    'X-Mailer': 'Microsoft Outlook', // Trusted client header simulation
+                    'Importance': 'normal'
                 }
             };
 
             await transporter.sendMail(mailOptions);
             successCount++;
 
-            // 250ms Ka micro delay — human behavior imitate karne ke liye
-            await delay(250); 
+            // Natural 1-second gap to pass Google automated rate limits
+            await delay(1000); 
+
         } catch (err) {
-            console.error(`Failed for ${recipient}:`, err.message);
+            console.error(`Failed to send to ${recipient}:`, err.message);
             failCount++;
         }
     }
 
-    transporter.close();
-
     return res.json({ 
         success: true, 
-        message: `Mails processed! Success: ${successCount}, Failed: ${failCount}` 
+        message: `Sending Complete! Success: ${successCount}, Failed: ${failCount}` 
     });
 });
 
