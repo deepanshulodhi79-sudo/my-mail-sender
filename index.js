@@ -5,7 +5,7 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Render environment variable se password aayega (Default fallback provided for safety)
+// Render Environment Variable se password aayega (fallback: "ChangeMe123!")
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "ChangeMe123!";
 
 app.use(express.json());
@@ -20,7 +20,7 @@ app.post('/api/login', (req, res) => {
     return res.status(401).json({ success: false, message: "Invalid Password" });
 });
 
-// Mail Sending API
+// Mail Sending API (Spam protection ke saath individual sending)
 app.post('/api/send-email', async (req, res) => {
     const { senderName, senderEmail, appPassword, subject, message, recipients } = req.body;
 
@@ -28,7 +28,7 @@ app.post('/api/send-email', async (req, res) => {
         return res.status(400).json({ success: false, message: "Sabhi fields bharna zaroori hai!" });
     }
 
-    // Line-by-line emails ko array me convert karna
+    // Line-by-line emails extract karna
     const emailList = recipients
         .split('\n')
         .map(e => e.trim())
@@ -38,7 +38,6 @@ app.post('/api/send-email', async (req, res) => {
         return res.status(400).json({ success: false, message: "Kam se kam ek recipient email dalein." });
     }
 
-    // SMTP Transporter setup (Gmail)
     const transporter = nodemailer.createTransport({
         service: 'gmail',
         auth: {
@@ -47,24 +46,38 @@ app.post('/api/send-email', async (req, res) => {
         }
     });
 
-    try {
-        // Mail options
-        const mailOptions = {
-            from: `"${senderName || senderEmail}" <${senderEmail}>`,
-            bcc: emailList, // Direct spam flags avoid karne ke liye BCC best hai
-            subject: subject,
-            text: message
-        };
+    let successCount = 0;
+    let failCount = 0;
 
-        await transporter.sendMail(mailOptions);
-        return res.json({ success: true, message: `${emailList.length} recipients ko mail bhej diya gaya!` });
-    } catch (error) {
-        console.error("Mail Error:", error);
-        return res.status(500).json({ success: false, message: "Mail bhejne me error aaya: " + error.message });
+    // Loop chala kar ek-ek recipient ko alag mail bhejna (Inbox placement badhane ke liye)
+    for (const recipient of emailList) {
+        try {
+            const mailOptions = {
+                from: `"${senderName}" <${senderEmail}>`,
+                to: recipient,
+                subject: subject,
+                text: message,
+                html: `<p>${message.replace(/\n/g, '<br>')}</p>`
+            };
+
+            await transporter.sendMail(mailOptions);
+            successCount++;
+
+            // Gmail rate-limiting & spam trigger se bachne ke liye 1 second ka gap
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        } catch (err) {
+            console.error(`Failed to send to ${recipient}:`, err.message);
+            failCount++;
+        }
     }
+
+    return res.json({ 
+        success: true, 
+        message: `Sending Complete! Success: ${successCount}, Failed: ${failCount}` 
+    });
 });
 
-// Default route
+// Default Route
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
