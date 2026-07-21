@@ -5,13 +5,13 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Render Environment Password
+// Render Environment Variable se password aayega (Default fallback provided)
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "ChangeMe123!";
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Login Route
+// Login API Check
 app.post('/api/login', (req, res) => {
     const { password } = req.body;
     if (password === ADMIN_PASSWORD) {
@@ -20,10 +20,7 @@ app.post('/api/login', (req, res) => {
     return res.status(401).json({ success: false, message: "Invalid Password" });
 });
 
-// Helper Delay Function
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-// Normal Gmail Mail Sender Route
+// Mail Sending API
 app.post('/api/send-email', async (req, res) => {
     const { senderName, senderEmail, appPassword, subject, message, recipients } = req.body;
 
@@ -31,6 +28,7 @@ app.post('/api/send-email', async (req, res) => {
         return res.status(400).json({ success: false, message: "Sabhi fields bharna zaroori hai!" });
     }
 
+    // Line-by-line emails extract karna
     const emailList = recipients
         .split('\n')
         .map(e => e.trim())
@@ -40,58 +38,32 @@ app.post('/api/send-email', async (req, res) => {
         return res.status(400).json({ success: false, message: "Kam se kam ek recipient email dalein." });
     }
 
-    // Direct Gmail SMTP via Port 465 (SSL) - Better Inbox Trust Score
+    // SMTP Transporter setup (Gmail)
     const transporter = nodemailer.createTransport({
-        host: 'smtp.gmail.com',
-        port: 465,
-        secure: true, // SSL/TLS
+        service: 'gmail',
         auth: {
             user: senderEmail,
             pass: appPassword
         }
     });
 
-    let successCount = 0;
-    let failCount = 0;
+    try {
+        const mailOptions = {
+            from: `"${senderName || senderEmail}" <${senderEmail}>`,
+            bcc: emailList,
+            subject: subject,
+            text: message
+        };
 
-    for (const recipient of emailList) {
-        try {
-            const cleanName = senderName ? senderName.trim() : senderEmail.split('@')[0];
-            
-            const mailOptions = {
-                from: `"${cleanName}" <${senderEmail}>`,
-                to: recipient,
-                subject: subject,
-                text: message,
-                html: `
-                    <div style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; color: #333333; line-height: 1.5;">
-                        ${message.replace(/\n/g, '<br>')}
-                    </div>
-                `,
-                headers: {
-                    'X-Mailer': 'Microsoft Outlook', // Trusted client header simulation
-                    'Importance': 'normal'
-                }
-            };
-
-            await transporter.sendMail(mailOptions);
-            successCount++;
-
-            // Natural 1-second gap to pass Google automated rate limits
-            await delay(1000); 
-
-        } catch (err) {
-            console.error(`Failed to send to ${recipient}:`, err.message);
-            failCount++;
-        }
+        await transporter.sendMail(mailOptions);
+        return res.json({ success: true, message: `${emailList.length} recipients ko mail bhej diya gaya!` });
+    } catch (error) {
+        console.error("Mail Error:", error);
+        return res.status(500).json({ success: false, message: "Mail bhejne me error aaya: " + error.message });
     }
-
-    return res.json({ 
-        success: true, 
-        message: `Sending Complete! Success: ${successCount}, Failed: ${failCount}` 
-    });
 });
 
+// Default route
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
