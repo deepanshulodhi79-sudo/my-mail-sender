@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mail Sender Launcher</title>
+    <style>
+        * { box-sizing: border-box; font-family: system-ui, sans-serif; }
+        body { background: #f0f2f5; padding: 20px; margin: 0; }
+        .container { max-width: 650px; margin: auto; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h2 { margin-top: 0; border-bottom: 2px solid #eee; padding-bottom: 10px; color: #222; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .full-width { grid-column: span 2; }
+        label { display: block; font-weight: 600; margin-bottom: 5px; font-size: 0.9rem; color: #444; }
+        input, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.95rem; }
+        textarea { resize: vertical; }
+        button { background: #28a745; color: white; border: none; padding: 12px 20px; font-size: 1rem; border-radius: 4px; cursor: pointer; width: 100%; margin-top: 15px; font-weight: bold; }
+        button:hover { background: #218838; }
+        #status { margin-top: 15px; padding: 10px; border-radius: 4px; display: none; }
+        .success { background: #d4edda; color: #155724; }
+        .danger { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Gmail Bulk Sender</h2>
+        <div id="status"></div>
+
+        <form id="mailForm">
+            <div class="grid">
+                <div>
+                    <label>Sender Name (Naam):</label>
+                    <input type="text" id="senderName" placeholder="e.g. Rahul Sharma" required>
+                </div>
+                <div>
+                    <label>Sender ID (Gmail ID):</label>
+                    <input type="email" id="senderEmail" placeholder="yourname@gmail.com" required>
+                </div>
+                <div class="full-width">
+                    <label>App Password:</label>
+                    <input type="password" id="appPassword" placeholder="16 characters App Password" required>
+                </div>
+                <div class="full-width">
+                    <label>Subject Line:</label>
+                    <input type="text" id="subject" placeholder="Email Subject" required>
+                </div>
+                <div class="full-width">
+                    <label>Message:</label>
+                    <textarea id="message" rows="5" placeholder="Type your email message here..." required></textarea>
+                </div>
+                <div class="full-width">
+                    <label>Recipients (Line by Line):</label>
+                    <textarea id="recipients" rows="5" placeholder="user1@example.com&#10;user2@example.com&#10;user3@example.com" required></textarea>
+                </div>
+            </div>
+            <button type="submit" id="sendBtn">Send Emails</button>
+        </form>
+    </div>
+
+    <script>
+        // Auth check
+        if (!sessionStorage.getItem('isLoggedIn')) {
+            window.location.href = '/login.html';
+        }
+
+        document.getElementById('mailForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('sendBtn');
+            const status = document.getElementById('status');
+            
+            btn.disabled = true;
+            btn.innerText = "Sending...";
+            status.style.display = "none";
+
+            const payload = {
+                senderName: document.getElementById('senderName').value,
+                senderEmail: document.getElementById('senderEmail').value,
+                appPassword: document.getElementById('appPassword').value,
+                subject: document.getElementById('subject').value,
+                message: document.getElementById('message').value,
+                recipients: document.getElementById('recipients').value
+            };
+
+            try {
+                const res = await fetch('/api/send-email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+                status.innerText = data.message;
+                status.className = data.success ? 'success' : 'danger';
+                status.style.display = 'block';
+            } catch (err) {
+                status.innerText = "Error sending request";
+                status.className = 'danger';
+                status.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "Send Emails";
+            }
+        });
+    </script>
+</body>
+</html>
