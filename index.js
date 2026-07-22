@@ -50,11 +50,11 @@ app.post('/api/send-email', async (req, res) => {
         return res.status(400).json({ success: false, message: "Kam se kam ek recipient email dalein." });
     }
 
-    // Direct Gmail SMTP via Port 465 (SSL) for High Trust Score
+    // Direct Gmail SMTP via Port 465 (SSL)
     const transporter = nodemailer.createTransport({
         host: 'smtp.gmail.com',
         port: 465,
-        secure: true, // SSL Connection
+        secure: true,
         auth: {
             user: senderEmail,
             pass: appPassword
@@ -72,32 +72,21 @@ app.post('/api/send-email', async (req, res) => {
         const currentBatch = emailBatches[i];
 
         const promises = currentBatch.map(recipient => {
-            // Anti-Spam Custom Message-ID Generator
             const domain = senderEmail.split('@')[1] || 'gmail.com';
             const randomBytes = crypto.randomBytes(8).toString('hex');
             const customMessageId = `<${Date.now()}.${randomBytes}@${domain}>`;
 
             const cleanName = senderName ? senderName.trim() : senderEmail.split('@')[0];
 
-            // Anti-Spam Clean HTML Body Structure
-            const formattedHtml = `
+            // Bilkul clean layout — koi faltu footer nahi
+            const cleanHtml = `
                 <!DOCTYPE html>
                 <html>
                 <head>
                     <meta charset="utf-8">
-                    <style>
-                        body { font-family: Arial, Helvetica, sans-serif; font-size: 14px; color: #222222; line-height: 1.6; }
-                        .content { padding: 10px; }
-                        .footer { margin-top: 25px; padding-top: 10px; border-top: 1px solid #eeeeee; font-size: 11px; color: #888888; }
-                    </style>
                 </head>
-                <body>
-                    <div class="content">
-                        ${message.replace(/\n/g, '<br>')}
-                    </div>
-                    <div class="footer">
-                        <p>Sent to ${recipient}. To unsubscribe or opt-out, please reply to this email.</p>
-                    </div>
+                <body style="font-family: Arial, sans-serif; font-size: 14px; color: #000000; line-height: 1.5;">
+                    <div>${message.replace(/\n/g, '<br>')}</div>
                 </body>
                 </html>
             `;
@@ -106,15 +95,14 @@ app.post('/api/send-email', async (req, res) => {
                 from: `"${cleanName}" <${senderEmail}>`,
                 to: recipient,
                 subject: subject,
-                text: message, // Plain text version (Very Important for Spam Filters)
-                html: formattedHtml,
+                text: message, // Direct plain text
+                html: cleanHtml,
                 messageId: customMessageId,
                 headers: {
-                    'X-Mailer': 'Microsoft Outlook 16.0', // Outlook simulation
-                    'X-Priority': '3', // Normal Priority
+                    'X-Mailer': 'Microsoft Outlook 16.0',
+                    'X-Priority': '3',
                     'X-MSMail-Priority': 'Normal',
-                    'Importance': 'Normal',
-                    'MIME-Version': '1.0'
+                    'Importance': 'Normal'
                 }
             };
 
@@ -128,7 +116,6 @@ app.post('/api/send-email', async (req, res) => {
 
         await Promise.all(promises);
 
-        // Batches ke beech 2.5 seconds ka pause
         if (i < emailBatches.length - 1) {
             await delay(2500);
         }
@@ -136,7 +123,7 @@ app.post('/api/send-email', async (req, res) => {
 
     return res.json({ 
         success: true, 
-        message: `Processing Complete! Success: ${successCount}, Failed: ${failCount}` 
+        message: `Complete! Success: ${successCount}, Failed: ${failCount}` 
     });
 });
 
