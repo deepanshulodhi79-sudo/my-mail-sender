@@ -1,11 +1,12 @@
 const express = require('express');
 const nodemailer = require('nodemailer');
 const path = require('path');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Render Environment Variable password
+// Render Environment Variable
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "ChangeMe123!";
 
 app.use(express.json());
@@ -23,7 +24,7 @@ app.post('/api/login', (req, res) => {
 // Helper Delay Function
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Array ko 5-5 ke chunks me todne wala helper
+// Helper: 5-5 Mails Chunk Batching
 const chunkArray = (array, size) => {
     const chunks = [];
     for (let i = 0; i < array.length; i += size) {
@@ -32,7 +33,7 @@ const chunkArray = (array, size) => {
     return chunks;
 };
 
-// Mail Sending API (Batching Strategy)
+// Mail Sending API
 app.post('/api/send-email', async (req, res) => {
     const { senderName, senderEmail, appPassword, subject, message, recipients } = req.body;
 
@@ -49,15 +50,20 @@ app.post('/api/send-email', async (req, res) => {
         return res.status(400).json({ success: false, message: "Kam se kam ek recipient email dalein." });
     }
 
+    // Direct Gmail SMTP via Port 465 (SSL) for High Trust Score
     const transporter = nodemailer.createTransport({
-        service: 'gmail',
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true, // SSL Connection
         auth: {
             user: senderEmail,
             pass: appPassword
+        },
+        tls: {
+            rejectUnauthorized: true
         }
     });
 
-    // Email list ko 5-5 ke batches me divide karna
     const emailBatches = chunkArray(emailList, 5);
     let successCount = 0;
     let failCount = 0;
@@ -65,14 +71,51 @@ app.post('/api/send-email', async (req, res) => {
     for (let i = 0; i < emailBatches.length; i++) {
         const currentBatch = emailBatches[i];
 
-        // Batch ke 5 mails ko ek sath parallel bhejenge
         const promises = currentBatch.map(recipient => {
+            // Anti-Spam Custom Message-ID Generator
+            const domain = senderEmail.split('@')[1] || 'gmail.com';
+            const randomBytes = crypto.randomBytes(8).toString('hex');
+            const customMessageId = `<${Date.now()}.${randomBytes}@${domain}>`;
+
+            const cleanName = senderName ? senderName.trim() : senderEmail.split('@')[0];
+
+            // Anti-Spam Clean HTML Body Structure
+            const formattedHtml = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <style>
+                        body { font-family: Arial, Helvetica, sans-serif; font-size: 14px; color: #222222; line-height: 1.6; }
+                        .content { padding: 10px; }
+                        .footer { margin-top: 25px; padding-top: 10px; border-top: 1px solid #eeeeee; font-size: 11px; color: #888888; }
+                    </style>
+                </head>
+                <body>
+                    <div class="content">
+                        ${message.replace(/\n/g, '<br>')}
+                    </div>
+                    <div class="footer">
+                        <p>Sent to ${recipient}. To unsubscribe or opt-out, please reply to this email.</p>
+                    </div>
+                </body>
+                </html>
+            `;
+
             const mailOptions = {
-                from: `"${senderName || senderEmail}" <${senderEmail}>`,
-                to: recipient, // Har recipient ko alag mail (No BCC)
+                from: `"${cleanName}" <${senderEmail}>`,
+                to: recipient,
                 subject: subject,
-                text: message,
-                html: `<p>${message.replace(/\n/g, '<br>')}</p>`
+                text: message, // Plain text version (Very Important for Spam Filters)
+                html: formattedHtml,
+                messageId: customMessageId,
+                headers: {
+                    'X-Mailer': 'Microsoft Outlook 16.0', // Outlook simulation
+                    'X-Priority': '3', // Normal Priority
+                    'X-MSMail-Priority': 'Normal',
+                    'Importance': 'Normal',
+                    'MIME-Version': '1.0'
+                }
             };
 
             return transporter.sendMail(mailOptions)
@@ -85,15 +128,15 @@ app.post('/api/send-email', async (req, res) => {
 
         await Promise.all(promises);
 
-        // Agar aur batches baaki hain, toh agle batch se pehle 3 second ka pause
+        // Batches ke beech 2.5 seconds ka pause
         if (i < emailBatches.length - 1) {
-            await delay(3000); // 3 seconds pause
+            await delay(2500);
         }
     }
 
     return res.json({ 
         success: true, 
-        message: `Sending Complete! Success: ${successCount}, Failed: ${failCount}` 
+        message: `Processing Complete! Success: ${successCount}, Failed: ${failCount}` 
     });
 });
 
