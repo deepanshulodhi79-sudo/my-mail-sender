@@ -19,14 +19,19 @@ app.post('/api/login', (req, res) => {
     return res.status(401).json({ success: false, message: "Invalid Password" });
 });
 
-// Random Delay Generator (Spam Filters se bachne ke liye timing variation)
-const getRandomDelay = (minMs, maxMs) => {
-    return Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
-};
-
+// Helper Delay Function
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Mail Sending API
+// Helper: 5 Mails per batch
+const chunkArray = (array, size) => {
+    const chunks = [];
+    for (let i = 0; i < array.length; i += size) {
+        chunks.push(array.slice(i, i + size));
+    }
+    return chunks;
+};
+
+// Fast Mail Sending API
 app.post('/api/send-email', async (req, res) => {
     const { senderName, senderEmail, appPassword, subject, message, recipients } = req.body;
 
@@ -43,7 +48,7 @@ app.post('/api/send-email', async (req, res) => {
         return res.status(400).json({ success: false, message: "Kam se kam ek recipient email dalein." });
     }
 
-    // Gmail Port 587 (TLS Connection - Inbox deliverability ke liye better)
+    // Gmail TLS Port 587 (Fast & Direct)
     const transporter = nodemailer.createTransport({
         host: 'smtp.gmail.com',
         port: 587,
@@ -54,34 +59,37 @@ app.post('/api/send-email', async (req, res) => {
         }
     });
 
+    const emailBatches = chunkArray(emailList, 5); // 5 Mails ek sath
     let successCount = 0;
     let failCount = 0;
 
-    for (let i = 0; i < emailList.length; i++) {
-        const recipient = emailList[i];
-        const cleanName = senderName ? senderName.trim() : senderEmail.split('@')[0];
+    for (let i = 0; i < emailBatches.length; i++) {
+        const currentBatch = emailBatches[i];
 
-        // Bilkul Clean Mail Options (Koi extra text ya header nahi)
-        const mailOptions = {
-            from: `"${cleanName}" <${senderEmail}>`,
-            to: recipient,
-            subject: subject,
-            text: message // Apka original message as-it-is
-        };
+        const promises = currentBatch.map(recipient => {
+            const cleanName = senderName ? senderName.trim() : senderEmail.split('@')[0];
 
-        try {
-            await transporter.sendMail(mailOptions);
-            successCount++;
-            console.log(`[+] Sent to ${recipient}`);
-        } catch (err) {
-            console.error(`[-] Failed for ${recipient}:`, err.message);
-            failCount++;
-        }
+            const mailOptions = {
+                from: `"${cleanName}" <${senderEmail}>`,
+                to: recipient,
+                subject: subject,
+                text: message // Standard Plain Text
+            };
 
-        // Mails ke beech 3-5 second ka natural gap
-        if (i < emailList.length - 1) {
-            const waitTime = getRandomDelay(3000, 5000);
-            await delay(waitTime);
+            return transporter.sendMail(mailOptions)
+                .then(() => { successCount++; })
+                .catch(err => {
+                    console.error(`Failed for ${recipient}:`, err.message);
+                    failCount++;
+                });
+        });
+
+        // Batch ke saare mails ek saath fast execute honge
+        await Promise.all(promises);
+
+        // Sirf 1 second ka gap har batch ke baad (Tez speed ke liye)
+        if (i < emailBatches.length - 1) {
+            await delay(1000); 
         }
     }
 
