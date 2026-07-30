@@ -7,7 +7,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Render Environment Variable
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "ChangeMe123!";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "!!";
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
