@@ -74,7 +74,7 @@ app.post('/api/send-email', async (req, res) => {
 
         // Sirf 1.5 se 2 second ka gap — na zyada slow, na anti-spam trigger
         if (i < emailList.length - 1) {
-            await delay(1500);
+            await delay(1000);
         }
     }
 
