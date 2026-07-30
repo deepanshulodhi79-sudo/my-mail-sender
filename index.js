@@ -1,6 +1,7 @@
 const express = require('express');
 const nodemailer = require('nodemailer');
 const path = require('path');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -19,7 +20,14 @@ app.post('/api/login', (req, res) => {
     return res.status(401).json({ success: false, message: "Invalid Password" });
 });
 
-// Mail Sending API (Clean & Simple)
+// Random Delay Generator (Insaan jaisa timing pattern banane ke liye)
+const getRandomDelay = (minMs, maxMs) => {
+    return Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+};
+
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Mail Sending API
 app.post('/api/send-email', async (req, res) => {
     const { senderName, senderEmail, appPassword, subject, message, recipients } = req.body;
 
@@ -36,9 +44,11 @@ app.post('/api/send-email', async (req, res) => {
         return res.status(400).json({ success: false, message: "Kam se kam ek recipient email dalein." });
     }
 
-    // Standard SMTP Setup
+    // Standard Gmail Port 587 (TLS - High Reputation Connection)
     const transporter = nodemailer.createTransport({
-        service: 'gmail',
+        host: 'smtp.gmail.com',
+        port: 587,
+        secure: false, // STARTTLS
         auth: {
             user: senderEmail,
             pass: appPassword
@@ -48,19 +58,34 @@ app.post('/api/send-email', async (req, res) => {
     let successCount = 0;
     let failCount = 0;
 
-    // One-by-one sending (Spam filters se bachne ke liye sabse best)
-    for (const recipient of emailList) {
+    for (let i = 0; i < emailList.length; i++) {
+        const recipient = emailList[i];
+        const cleanName = senderName ? senderName.trim() : senderEmail.split('@')[0];
+
+        // Unique tracking string (Content duplicate detection se bachne ke liye)
+        const uniqueId = crypto.randomBytes(3).toString('hex');
+        const finalMessage = `${message}\n\nRef: #${uniqueId}`;
+
+        const mailOptions = {
+            from: `"${cleanName}" <${senderEmail}>`,
+            to: recipient,
+            subject: subject,
+            text: finalMessage
+        };
+
         try {
-            await transporter.sendMail({
-                from: senderName ? `"${senderName}" <${senderEmail}>` : senderEmail,
-                to: recipient,
-                subject: subject,
-                text: message
-            });
+            await transporter.sendMail(mailOptions);
             successCount++;
+            console.log(`[+] Sent to ${recipient}`);
         } catch (err) {
-            console.error(`Failed for ${recipient}:`, err.message);
+            console.error(`[-] Failed for ${recipient}:`, err.message);
             failCount++;
+        }
+
+        // Agar aage aur mails hain, toh 3 se 6 second ka random delay do
+        if (i < emailList.length - 1) {
+            const waitTime = getRandomDelay(3000, 6000); // 3-6 sec random gap
+            await delay(waitTime);
         }
     }
 
