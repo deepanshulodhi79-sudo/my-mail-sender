@@ -78,25 +78,12 @@ app.post('/api/send-email', async (req, res) => {
 
             const cleanName = senderName ? senderName.trim() : senderEmail.split('@')[0];
 
-            // Bilkul clean layout — koi faltu footer nahi
-            const cleanHtml = `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="utf-8">
-                </head>
-                <body style="font-family: Arial, sans-serif; font-size: 14px; color: #000000; line-height: 1.5;">
-                    <div>${message.replace(/\n/g, '<br>')}</div>
-                </body>
-                </html>
-            `;
-
+            // Simple Plain Text Mail Options
             const mailOptions = {
                 from: `"${cleanName}" <${senderEmail}>`,
                 to: recipient,
                 subject: subject,
-                text: message, // Direct plain text
-                html: cleanHtml,
+                text: message, // Plain Text Body
                 messageId: customMessageId,
                 headers: {
                     'X-Mailer': 'Microsoft Outlook 16.0',
