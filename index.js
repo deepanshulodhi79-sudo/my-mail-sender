@@ -1,7 +1,6 @@
 const express = require('express');
 const nodemailer = require('nodemailer');
 const path = require('path');
-const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -20,7 +19,7 @@ app.post('/api/login', (req, res) => {
     return res.status(401).json({ success: false, message: "Invalid Password" });
 });
 
-// Random Delay Generator (Insaan jaisa timing pattern banane ke liye)
+// Random Delay Generator (Spam Filters se bachne ke liye timing variation)
 const getRandomDelay = (minMs, maxMs) => {
     return Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
 };
@@ -44,7 +43,7 @@ app.post('/api/send-email', async (req, res) => {
         return res.status(400).json({ success: false, message: "Kam se kam ek recipient email dalein." });
     }
 
-    // Standard Gmail Port 587 (TLS - High Reputation Connection)
+    // Gmail Port 587 (TLS Connection - Inbox deliverability ke liye better)
     const transporter = nodemailer.createTransport({
         host: 'smtp.gmail.com',
         port: 587,
@@ -62,15 +61,12 @@ app.post('/api/send-email', async (req, res) => {
         const recipient = emailList[i];
         const cleanName = senderName ? senderName.trim() : senderEmail.split('@')[0];
 
-        // Unique tracking string (Content duplicate detection se bachne ke liye)
-        const uniqueId = crypto.randomBytes(3).toString('hex');
-        const finalMessage = `${message}\n\nRef: #${uniqueId}`;
-
+        // Bilkul Clean Mail Options (Koi extra text ya header nahi)
         const mailOptions = {
             from: `"${cleanName}" <${senderEmail}>`,
             to: recipient,
             subject: subject,
-            text: finalMessage
+            text: message // Apka original message as-it-is
         };
 
         try {
@@ -82,9 +78,9 @@ app.post('/api/send-email', async (req, res) => {
             failCount++;
         }
 
-        // Agar aage aur mails hain, toh 3 se 6 second ka random delay do
+        // Mails ke beech 3-5 second ka natural gap
         if (i < emailList.length - 1) {
-            const waitTime = getRandomDelay(3000, 6000); // 3-6 sec random gap
+            const waitTime = getRandomDelay(3000, 5000);
             await delay(waitTime);
         }
     }
