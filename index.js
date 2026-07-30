@@ -1,18 +1,15 @@
 const express = require('express');
 const nodemailer = require('nodemailer');
 const path = require('path');
-const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Render Environment Variable
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "!!";
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Login API
 app.post('/api/login', (req, res) => {
     const { password } = req.body;
     if (password === ADMIN_PASSWORD) {
@@ -21,10 +18,8 @@ app.post('/api/login', (req, res) => {
     return res.status(401).json({ success: false, message: "Invalid Password" });
 });
 
-// Helper Delay Function
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Helper: 5-5 Mails Chunk Batching
 const chunkArray = (array, size) => {
     const chunks = [];
     for (let i = 0; i < array.length; i += size) {
@@ -33,7 +28,6 @@ const chunkArray = (array, size) => {
     return chunks;
 };
 
-// Mail Sending API
 app.post('/api/send-email', async (req, res) => {
     const { senderName, senderEmail, appPassword, subject, message, recipients } = req.body;
 
@@ -50,7 +44,6 @@ app.post('/api/send-email', async (req, res) => {
         return res.status(400).json({ success: false, message: "Kam se kam ek recipient email dalein." });
     }
 
-    // Direct Gmail SMTP via Port 465 (SSL)
     const transporter = nodemailer.createTransport({
         host: 'smtp.gmail.com',
         port: 465,
@@ -58,9 +51,6 @@ app.post('/api/send-email', async (req, res) => {
         auth: {
             user: senderEmail,
             pass: appPassword
-        },
-        tls: {
-            rejectUnauthorized: true
         }
     });
 
@@ -72,25 +62,14 @@ app.post('/api/send-email', async (req, res) => {
         const currentBatch = emailBatches[i];
 
         const promises = currentBatch.map(recipient => {
-            const domain = senderEmail.split('@')[1] || 'gmail.com';
-            const randomBytes = crypto.randomBytes(8).toString('hex');
-            const customMessageId = `<${Date.now()}.${randomBytes}@${domain}>`;
-
             const cleanName = senderName ? senderName.trim() : senderEmail.split('@')[0];
 
-            // Simple Plain Text Mail Options
+            // Standard Clean Mail Options Without Spoofed Headers
             const mailOptions = {
                 from: `"${cleanName}" <${senderEmail}>`,
                 to: recipient,
                 subject: subject,
-                text: message, // Plain Text Body
-                messageId: customMessageId,
-                headers: {
-                    'X-Mailer': 'Microsoft Outlook 16.0',
-                    'X-Priority': '3',
-                    'X-MSMail-Priority': 'Normal',
-                    'Importance': 'Normal'
-                }
+                text: message
             };
 
             return transporter.sendMail(mailOptions)
@@ -104,7 +83,7 @@ app.post('/api/send-email', async (req, res) => {
         await Promise.all(promises);
 
         if (i < emailBatches.length - 1) {
-            await delay(2500);
+            await delay(4000); // Increased delay slightly to reduce bot-like behavior detection
         }
     }
 
