@@ -19,19 +19,9 @@ app.post('/api/login', (req, res) => {
     return res.status(401).json({ success: false, message: "Invalid Password" });
 });
 
-// Helper Delay Function
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Helper: 5 Mails per batch
-const chunkArray = (array, size) => {
-    const chunks = [];
-    for (let i = 0; i < array.length; i += size) {
-        chunks.push(array.slice(i, i + size));
-    }
-    return chunks;
-};
-
-// Fast Mail Sending API
+// Mail Sending API
 app.post('/api/send-email', async (req, res) => {
     const { senderName, senderEmail, appPassword, subject, message, recipients } = req.body;
 
@@ -48,48 +38,43 @@ app.post('/api/send-email', async (req, res) => {
         return res.status(400).json({ success: false, message: "Kam se kam ek recipient email dalein." });
     }
 
-    // Gmail TLS Port 587 (Fast & Direct)
+    let successCount = 0;
+    let failCount = 0;
+
+    // Direct Transporter Setup
     const transporter = nodemailer.createTransport({
-        host: 'smtp.gmail.com',
-        port: 587,
-        secure: false, // STARTTLS
+        service: 'gmail',
         auth: {
             user: senderEmail,
             pass: appPassword
         }
     });
 
-    const emailBatches = chunkArray(emailList, 5); // 5 Mails ek sath
-    let successCount = 0;
-    let failCount = 0;
+    const cleanName = senderName ? senderName.trim() : senderEmail.split('@')[0];
 
-    for (let i = 0; i < emailBatches.length; i++) {
-        const currentBatch = emailBatches[i];
+    // Speed + Inboxing Balanced Loop
+    for (let i = 0; i < emailList.length; i++) {
+        const recipient = emailList[i];
 
-        const promises = currentBatch.map(recipient => {
-            const cleanName = senderName ? senderName.trim() : senderEmail.split('@')[0];
+        const mailOptions = {
+            from: `"${cleanName}" <${senderEmail}>`,
+            to: recipient,
+            subject: subject,
+            text: message
+        };
 
-            const mailOptions = {
-                from: `"${cleanName}" <${senderEmail}>`,
-                to: recipient,
-                subject: subject,
-                text: message // Standard Plain Text
-            };
+        try {
+            await transporter.sendMail(mailOptions);
+            successCount++;
+            console.log(`[✓] Sent to ${recipient}`);
+        } catch (err) {
+            console.error(`[X] Failed for ${recipient}:`, err.message);
+            failCount++;
+        }
 
-            return transporter.sendMail(mailOptions)
-                .then(() => { successCount++; })
-                .catch(err => {
-                    console.error(`Failed for ${recipient}:`, err.message);
-                    failCount++;
-                });
-        });
-
-        // Batch ke saare mails ek saath fast execute honge
-        await Promise.all(promises);
-
-        // Sirf 1 second ka gap har batch ke baad (Tez speed ke liye)
-        if (i < emailBatches.length - 1) {
-            await delay(1000); 
+        // Sirf 1.5 se 2 second ka gap — na zyada slow, na anti-spam trigger
+        if (i < emailList.length - 1) {
+            await delay(1500);
         }
     }
 
