@@ -17,7 +17,7 @@ app.post('/api/login', (req, res) => {
     return res.status(401).json({ success: false, message: "Invalid Password" });
 });
 
-// Mail Sending API (Simple Setup)
+// Mail Sending API
 app.post('/api/send-email', async (req, res) => {
     const { senderName, senderEmail, appPassword, subject, message, recipients } = req.body;
 
@@ -27,7 +27,6 @@ app.post('/api/send-email', async (req, res) => {
 
     const emailList = recipients.split('\n').map(e => e.trim()).filter(Boolean);
 
-    // Simple Transporter
     const transporter = nodemailer.createTransport({
         service: 'gmail',
         auth: {
@@ -37,15 +36,15 @@ app.post('/api/send-email', async (req, res) => {
     });
 
     try {
-        // Sabhi emails ek saath bhejne ke liye
-        await Promise.all(emailList.map(recipient => 
-            transporter.sendMail({
+        // Ek-ek karke send karega (Fast + No 421 Error)
+        for (const recipient of emailList) {
+            await transporter.sendMail({
                 from: `"${senderName || 'Sender'}" <${senderEmail}>`,
                 to: recipient,
                 subject: subject,
                 text: message
-            })
-        ));
+            });
+        }
 
         return res.json({ success: true, message: "Sabhi mails bhej diye gaye!" });
     } catch (err) {
