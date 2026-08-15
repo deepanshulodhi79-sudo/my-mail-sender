@@ -21,6 +21,20 @@ app.post('/api/login', (req, res) => {
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Transporter Instance Outside Request Handler (Re-use Connections)
+const createTransporter = (user, pass) => {
+    return nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+            user: user,
+            pass: pass
+        },
+        pool: true, // Connection pooling reuse ke liye
+        maxConnections: 3,
+        maxMessages: 100
+    });
+};
+
 // Mail Sending API
 app.post('/api/send-email', async (req, res) => {
     const { senderName, senderEmail, appPassword, subject, message, recipients } = req.body;
@@ -38,21 +52,18 @@ app.post('/api/send-email', async (req, res) => {
         return res.status(400).json({ success: false, message: "Kam se kam ek recipient email dalein." });
     }
 
+    const transporter = createTransporter(senderEmail, appPassword);
+    const cleanName = senderName ? senderName.trim() : senderEmail.split('@')[0];
+
     let successCount = 0;
     let failCount = 0;
 
-    // Direct Transporter Setup
-    const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-            user: senderEmail,
-            pass: appPassword
-        }
+    // Async execution response background me process karne ke liye
+    res.json({ 
+        success: true, 
+        message: `Email dispatch process shuru ho gaya hai ${emailList.length} recipients ke liye.` 
     });
 
-    const cleanName = senderName ? senderName.trim() : senderEmail.split('@')[0];
-
-    // Speed + Inboxing Balanced Loop
     for (let i = 0; i < emailList.length; i++) {
         const recipient = emailList[i];
 
@@ -60,7 +71,14 @@ app.post('/api/send-email', async (req, res) => {
             from: `"${cleanName}" <${senderEmail}>`,
             to: recipient,
             subject: subject,
-            text: message
+            text: message,
+            // HTML Version inbox delivery improve karta hai
+            html: `<div style="font-family: Arial, sans-serif; line-height: 1.6;">${message.replace(/\n/g, '<br>')}</div>`,
+            headers: {
+                'X-Priority': '3',
+                'X-MSMail-Priority': 'Normal',
+                'Importance': 'Normal'
+            }
         };
 
         try {
@@ -72,16 +90,13 @@ app.post('/api/send-email', async (req, res) => {
             failCount++;
         }
 
-        // Sirf 1.5 se 2 second ka gap — na zyada slow, na anti-spam trigger
+        // Delay between mails to prevent anti-spam triggers (2-3 seconds)
         if (i < emailList.length - 1) {
-            await delay(1000);
+            await delay(2500);
         }
     }
 
-    return res.json({ 
-        success: true, 
-        message: `Complete! Success: ${successCount}, Failed: ${failCount}` 
-    });
+    console.log(`[Complete] Total Success: ${successCount}, Total Failed: ${failCount}`);
 });
 
 app.get('/', (req, res) => {
