@@ -9,6 +9,8 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "!!";
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 // Login API
 app.post('/api/login', (req, res) => {
     if (req.body.password === ADMIN_PASSWORD) {
@@ -35,21 +37,46 @@ app.post('/api/send-email', async (req, res) => {
         }
     });
 
-    try {
-        // Ek-ek karke send karega (Fast + No 421 Error)
-        for (const recipient of emailList) {
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < emailList.length; i++) {
+        const recipient = emailList[i];
+        
+        // Spam bypass: Har mail me unique tracking ID
+        const uniqueId = Math.random().toString(36).substring(7);
+
+        try {
             await transporter.sendMail({
                 from: `"${senderName || 'Sender'}" <${senderEmail}>`,
                 to: recipient,
                 subject: subject,
-                text: message
+                text: `${message}\n\nRef: #${uniqueId}`,
+                html: `
+                    <div style="font-family: Arial, sans-serif; font-size: 14px; color: #222; line-height: 1.5;">
+                        <p>${message.replace(/\n/g, '<br>')}</p>
+                        <br>
+                        <span style="color: #999; font-size: 10px;">Ref ID: ${uniqueId}</span>
+                    </div>
+                `
             });
+            successCount++;
+            console.log(`[✓] Sent to: ${recipient}`);
+        } catch (err) {
+            failCount++;
+            console.error(`[X] Error: ${recipient}`, err.message);
         }
 
-        return res.json({ success: true, message: "Sabhi mails bhej diye gaye!" });
-    } catch (err) {
-        return res.status(500).json({ success: false, message: err.message });
+        // 1-second safe gap
+        if (i < emailList.length - 1) {
+            await delay(1000);
+        }
     }
+
+    return res.json({
+        success: true,
+        message: `Process complete! Success: ${successCount}, Failed: ${failCount}`
+    });
 });
 
 app.get('/', (req, res) => {
